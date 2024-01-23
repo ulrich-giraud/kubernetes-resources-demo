@@ -1,0 +1,207 @@
+# Kubernetes et les ressources
+
+Gouter Engineering
+23 Jan 2024
+
+: ssh -L 6443:172.18.8.101:6443 falrich@10.0.4.40
+: cd git/kubespray/
+: vagrant up
+: vagrant ssh -c "sudo cat /root/.kube/config" k8s-1
+: export KUBECONFIG=~/config_demo
+
+## Enfoncons quelques porte ouvertes
+
+Kubernetes propose de définir des ressources:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+      - resources:
+          requests:
+            cpu: 1m
+            memory: 32Mi
+          limits:
+            cpu: 1
+            memory: 128Mi
+```
+
+Ces définitions ont deux buts :
+  * Aider le scheduler a positionner vos pods
+  * Empecher vos pods de surconsommer
+
+## Les requests
+
+Elles informent le scheduler de la consommation du container en **régime de croisière**
+
+<img src="img/cluster-1.svg" alt="image" width="100%" height="auto">
+
+## Schedule d'un nouveau pod
+
+<img src="img/new-pod.svg" alt="image" width="100%" height="auto">
+
+## La réalité est différente de la définition
+
+Il s'agit simplement d'une moyenne d'utilisation pour aider a la décision, mais:
+
+* Le pod peut consommer plus ou moins que sa request
+* Ce n'est pas une limitation
+* Déclarer trop large gaspille les ressources
+
+## 💥 Testons sur un cluster
+
+Le cluster :
+
+```
+NAME↑ STATUS ROLE          TAINTS VERSION PODS CPU MEM %CPU %MEM CPU/A MEM/A
+k8s-1 Ready  control-plane 1      v1.28.5    7 206 923   10   11  2000  7742
+k8s-2 Ready  control-plane 1      v1.28.5    8 209 959   10   12  2000  7742
+k8s-3 Ready  control-plane 1      v1.28.5    6 212 912   10   11  2000  7742
+k8s-4 Ready  <none>        0      v1.28.5    5  50 541    2    6  2000  7742
+k8s-5 Ready  <none>        0      v1.28.5    6  56 617    2    7  2000  7742
+k8s-6 Ready  <none>        0      v1.28.5    5  48 586    2    7  2000  7742
+```
+
+## Un déploiement nginx innocent 👼🏼
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx
+  namespace: gachis
+spec:
+  replicas: 3
+  [...]
+  template:
+    [...]
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        resources:
+          requests:
+            cpu: 1700m # 🧨 
+            memory: 32Mi
+          limits:
+            memory: 128Mi
+```
+
+## et un autre déploiement tout simple
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-100
+  namespace: gachis
+spec:
+  replicas: 1
+  [...]
+  template:
+    [...]
+    spec:
+      containers:
+      - image: nginx
+        name: nginx-100
+        resources:
+          requests:
+            cpu: 100m 
+            memory: 32Mi
+          limits:
+            memory: 128Mi
+```
+
+😰 Notre pod ne démarre pas! pourtant il est de taille raisonnable
+
+## Nous réservons effectivement des ressources
+
+Le pod n'a pas pu être "schedule" :
+
+<img src="img/events-surconso.png" alt="image" width="100%" height="auto" style="display: block; margin-left: auto; margin-right: auto;">
+
+En plus imagé, voici ce qu'il se passe :
+
+<img src="img/nginx-surconso.svg" alt="image" width="70%" height="auto" style="display: block; margin-left: auto; margin-right: auto;">
+
+: Supprimer le pod 1700 et constater que notre deploiement se schedule
+: k delete deployments.apps -n gachis nginx-1700
+: Augmenter les replicas a 10
+: k scale deployment -n gachis --replicas 10 nginx-100
+
+## Pourquoi réserver des ressources?
+
+Et si on utilisait pas les requests? Après tout, rien ne nous oblige a les déclarer, et on prends le risque de gaspiller des ressources.
+
+Testons avec un pod qui consomme de la mémoire.
+
+```
+kubectl apply -f src/norequests-conso-mem.yaml
+kubectl -n norequests port-forward $(kubectl -n norequests get pod -o jsonpath='{.items[0].metadata.name}') 8080:8080
+curl -v localhost:8080?m=7000
+```
+
+Le noeud sur lequel est déployé notre pod est quasiment saturé en mémoire. Déployons un composant simple qui consomme de la mémoire avec 6 replicas :
+
+```
+kubectl apply -f src/conso-256m.yaml
+```
+
+On trouve des replicas sur le noeud saturé! Et un des pods a redémarré pour cause d'OOMKill.
+Le scheduler ne tiens pas compte de la charge réelle des noeuds seulement des informations de requests que nous lui fournissons.
+
+
+## Il y a pire! 😱
+
+Imaginons qu'un noeud nécessite une operation de maintenance...
+
+```
+kubectl cordon k8s-6
+kubectl drain --ignore-daemonsets=true k8s-6
+kubectl uncordon k8s-6
+```
+
+La charge ne se ré-équilibre pas, et comme nous n'avons rien défini, Kubernetes ne sait pas que le noeud 4 est surchargé.
+
+## Les limites 📈
+
+La limite CPU est contre productive, une excellente description se trouve dans [cet article](https://home.robusta.dev/blog/stop-using-cpu-limits)
+En limitant le cpu, on ralentit le workload même quand de la ressource est disponible.
+
+Coté mémoire cependant, la limiter permet d'éviter qu'un pod ne consomme toute la mémoire d'un noeud et impacte les performances d'autres déploiements
+
+: montrer l'état du pod 7000
+
+__Et la QoS du coup?__
+
+Viser la QoS guaranteed est souvent illusoire, cela impose d'utiliser la limite CPU, et sous entends que le composant déployé a une consommation linéaire.
+
+De plus, elle ne corresponds coté système qu'a des CGroups différents, et n'entre pas en jeu dans l'éviction, seulement dans la gestion des OoM.
+
+: vagrant ssh k8s-4
+: sudo systemd-cgls
+
+
+## Et chez Evaneos?
+
+Deux dashboards interressants :
+
+* [définition vs utilisation](https://app.datadoghq.com/orchestration/resource/deployment?query=tag%23kube_cluster_name%3Aprod2&expanded=tag%23kube_cluster_name%3Aprod2&groups=tag%23kube_cluster_name&panel_tab=yaml&pg=0&resource_mode=cpu&resource-na-groups=false&sort=metrics.cpu_usage_pct_requests_avg15%3Aasc&start=1706022367147&end=1706023267147&paused=false)
+* [ressources réservées non utilisée](https://app.datadoghq.com/dashboard/gxu-uiq-557/kubernetes-ressource-usage?refresh_mode=sliding&view=spans&from_ts=1706019669230&to_ts=1706023269230&live=true) 
+
+## Pourquoi définir tout ca ?
+
+Si nous parvenons a définir les ressources de l'intégralité de notre workload, on garantira:
+  * un scheduling efficace
+  * la capacité d'autoscaler le workload
+  * la capacité d'autoscaler les clusters
+
+**Et comment le définir?**
+
+Plusieurs pistes sont possibles:
+  * Utiliser [datadog](https://app.datadoghq.com/metric/explorer?start=1706022296262&end=1706025896262&paused=false#N4Ig7glgJg5gpgFxALlAGwIYE8D2BXJVEADxQEYAaELcqyKBAC1pEbghkcLIF8qo4AMwgA7CAgg4RKUAiwAHOChASAtnADOcAE4RNIKtrgBHPJoQaUAbVBGN8qVoD6gnNtUZCKiOq279VKY6epbINiAiGOrKQdpYZAYgUJ4YThr42gDGSsgg6gi6mZaBZnHKGABuMMiZUggYojoAdJnyeE14GhjwwADWeABGcE4C8mg4WOoiCMjqqkPaALQDOBQABP1DTplonQg6TpHqyPLaOFAATDwgPAC6VK7ueJih4Y+qzxgxpfE39yAaORoHKgeQYYEIfbKKA4GDbF4aCCZRJoRpOOSKZTpVFQFFo+hMZQiNweNA3fgQeyYLDohQ5ECokRKO48PgAsbiADCUmEMBQImeaB4QA) pour se faire une idée de la consommation
+  * Gatling
+  * Le [Vertical Pod Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler) en mode "recommandation"

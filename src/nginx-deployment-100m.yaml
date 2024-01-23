@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-100
+  name: nginx-100
+  namespace: gachis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx-100
+  template:
+    metadata:
+      labels:
+        app: nginx-100
+    spec:
+      containers:
+      - image: nginx
+        name: nginx-100
+        resources:
+          requests:
+            cpu: 100m
+            memory: 32Mi
+          limits:
+            memory: 128Mi

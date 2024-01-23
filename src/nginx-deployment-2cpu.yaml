@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gachis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx-1700
+  name: nginx-1700
+  namespace: gachis
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx-1700
+  template:
+    metadata:
+      labels:
+        app: nginx-1700
+    spec:
+      containers:
+      - image: nginx
+        name: nginx-1700
+        resources:
+          requests:
+            cpu: 1700m
+            memory: 32Mi
+          limits:
+            memory: 128Mi

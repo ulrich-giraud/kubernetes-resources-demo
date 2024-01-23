@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: consomme256
+  name: consomme256
+  namespace: norequests
+spec:
+  replicas: 6
+  selector:
+    matchLabels:
+      app: consomme256
+  template:
+    metadata:
+      labels:
+        app: consomme256
+    spec:
+      containers:
+      - image: ulrichgiraud1518/consomme-256:latest
+        name: consomme256

@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: norequests
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: consomemoire
+  namespace: norequests
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      run: consomemoire
+  template:
+    metadata:
+      labels:
+        run: consomemoire
+    spec:
+      containers:
+      - name: consomemoire
+        image: ulrichgiraud1518/fuite-memoire
+        ports:
+        - containerPort: 8080
+        resources: {}
