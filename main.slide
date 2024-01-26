@@ -39,13 +39,15 @@ Elles informent le scheduler de la consommation du container en **régime de cro
 
 <img src="img/cluster-1.svg" alt="image" width="100%" height="auto">
 
+La taille du pod est la somme des __requests__ des containers
+
 ## Schedule d'un nouveau pod
 
 <img src="img/new-pod.svg" alt="image" width="100%" height="auto">
 
 ## La réalité est différente de la définition
 
-Il s'agit simplement d'une moyenne d'utilisation pour aider a la décision, mais:
+Il s'agit simplement d'une moyenne d'utilisation pour aider à la décision, mais:
 
 * Le pod peut consommer plus ou moins que sa request
 * Ce n'est pas une limitation
@@ -64,6 +66,8 @@ k8s-4 Ready  <none>        0      v1.28.5    5  50 541    2    6  2000  7742
 k8s-5 Ready  <none>        0      v1.28.5    6  56 617    2    7  2000  7742
 k8s-6 Ready  <none>        0      v1.28.5    5  48 586    2    7  2000  7742
 ```
+
+Normalement, 3 noeuds, 8Go de mémoire et 2 vCpus par noeud, 💪 on ne devrait pas le faire saturer trop facilement...
 
 ## Un déploiement nginx innocent 👼🏼
 
@@ -141,7 +145,7 @@ Testons avec un pod qui consomme de la mémoire.
 ```
 kubectl apply -f src/norequests-conso-mem.yaml
 kubectl -n norequests port-forward $(kubectl -n norequests get pod -o jsonpath='{.items[0].metadata.name}') 8080:8080
-curl -v localhost:8080?m=7000
+curl -v localhost:8080?m=7000 # Demande de consommer 7Go
 ```
 
 Le noeud sur lequel est déployé notre pod est quasiment saturé en mémoire. Déployons un composant simple qui consomme de la mémoire avec 6 replicas :
@@ -179,7 +183,7 @@ __Et la QoS du coup?__
 
 Viser la QoS guaranteed est souvent illusoire, cela impose d'utiliser la limite CPU, et sous entends que le composant déployé a une consommation linéaire.
 
-De plus, elle ne corresponds coté système qu'a des CGroups différents, et n'entre pas en jeu dans l'éviction, seulement dans la gestion des OoM.
+De plus, elle ne corresponds coté système qu'à des CGroups différents, et n'entre pas en jeu dans l'éviction, seulement dans la gestion des OOM.
 
 : vagrant ssh k8s-4
 : sudo systemd-cgls
@@ -187,10 +191,10 @@ De plus, elle ne corresponds coté système qu'a des CGroups différents, et n'e
 
 ## Et chez Evaneos?
 
-Deux dashboards interressants :
+Deux dashboards intéressants :
 
 * [définition vs utilisation](https://app.datadoghq.com/orchestration/resource/deployment?query=tag%23kube_cluster_name%3Aprod2&expanded=tag%23kube_cluster_name%3Aprod2&groups=tag%23kube_cluster_name&panel_tab=yaml&pg=0&resource_mode=cpu&resource-na-groups=false&sort=metrics.cpu_usage_pct_requests_avg15%3Aasc&start=1706022367147&end=1706023267147&paused=false)
-* [ressources réservées non utilisée](https://app.datadoghq.com/dashboard/gxu-uiq-557/kubernetes-ressource-usage?refresh_mode=sliding&view=spans&from_ts=1706019669230&to_ts=1706023269230&live=true) 
+* [ressources réservées non utilisées](https://app.datadoghq.com/dashboard/gxu-uiq-557/kubernetes-ressource-usage?refresh_mode=sliding&view=spans&from_ts=1706019669230&to_ts=1706023269230&live=true) 
 
 ## Pourquoi définir tout ca ?
 
