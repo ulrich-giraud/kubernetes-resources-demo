@@ -12,6 +12,7 @@ You can run the slideshow on your machine after following a few simple steps:
     ```shell
     echo `go env GOBIN`
     ```
+    On macos and linux, it defaults to `$HOME/go/bin`
 
 3. Install the [`present`][present] tool:
 
