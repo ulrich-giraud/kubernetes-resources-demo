@@ -9,7 +9,7 @@ Gouter Engineering
 : vagrant ssh -c "sudo cat /root/.kube/config" k8s-1
 : export KUBECONFIG=~/config_demo
 
-## Enfoncons quelques porte ouvertes
+## Enfonçons quelques porte ouvertes
 
 Kubernetes propose de définir des ressources:
 
@@ -30,8 +30,8 @@ spec:
 ```
 
 Ces définitions ont deux buts :
-  * Aider le scheduler a positionner vos pods
-  * Empecher vos pods de surconsommer
+  * Aider le scheduler (process kubernetes assignant les pods aux nodes) à positionner vos pods
+  * Empêcher vos pods de surconsommer des resources mémoires et/ou cpu
 
 ## Les requests
 
@@ -39,7 +39,7 @@ Elles informent le scheduler de la consommation du container en **régime de cro
 
 <img src="img/cluster-1.svg" alt="image" width="100%" height="auto">
 
-La taille du pod est la somme des __requests__ des containers
+La réservation de ressources du pod est la somme des __requests__ des containers
 
 ## Schedule d'un nouveau pod
 
@@ -143,7 +143,7 @@ Et si on utilisait pas les requests? Après tout, rien ne nous oblige a les déc
 Testons avec un pod qui consomme de la mémoire.
 
 ```
-kubectl apply -f src/norequests-conso-mem.yaml
+kubectl apply -f src/norequests-conso-mem.yaml # Ce deployment n'a aucune request définie
 kubectl -n norequests port-forward $(kubectl -n norequests get pod -o jsonpath='{.items[0].metadata.name}') 8080:8080
 curl -v localhost:8080?m=7000 # Demande de consommer 7Go
 ```
@@ -154,8 +154,13 @@ Le noeud sur lequel est déployé notre pod est quasiment saturé en mémoire. D
 kubectl apply -f src/conso-256m.yaml
 ```
 
-On trouve des replicas sur le noeud saturé! Et un des pods a redémarré pour cause d'OOMKill.
+## 
+
+On trouve des replicas sur le noeud saturé! Et un des pods a redémarré pour cause d'Out of Memory ( OOMKill ).
+
 Le scheduler ne tiens pas compte de la charge réelle des noeuds seulement des informations de requests que nous lui fournissons.
+
+<img src="img/surcharge.svg" alt="image" width="100%" height="auto" style="display: block; margin-left: auto; margin-right: auto;">
 
 
 ## Il y a pire! 😱
@@ -172,18 +177,30 @@ La charge ne se ré-équilibre pas, et comme nous n'avons rien défini, Kubernet
 
 ## Les limites 📈
 
-La limite CPU est contre productive, une excellente description se trouve dans [cet article](https://home.robusta.dev/blog/stop-using-cpu-limits)
-En limitant le cpu, on ralentit le workload même quand de la ressource est disponible.
+Les limites vont permettre d'empêcher de dépasser la consommation maximale définie.
 
-Coté mémoire cependant, la limiter permet d'éviter qu'un pod ne consomme toute la mémoire d'un noeud et impacte les performances d'autres déploiements
+  * Si nous définissons 256Mi de mémoire par exemple, le container sera "Kill" et redémarré.
+  * Côté CPU, le process est moins extrème, le container sera simplement ralenti ( throttled )
+
+La limite CPU est contre productive, en limitant le cpu, on ralentit le workload même quand de la ressource est disponible.
+Une excellente explication se trouve dans [cet article](https://home.robusta.dev/blog/stop-using-cpu-limits)
+
+Côté mémoire cependant, la limiter permet d'éviter qu'un pod ne consomme toute la mémoire d'un noeud et impacte les performances d'autres déploiements
 
 : montrer l'état du pod 7000
 
-__Et la QoS du coup?__
+## Et la QoS?
 
-Viser la QoS guaranteed est souvent illusoire, cela impose d'utiliser la limite CPU, et sous entends que le composant déployé a une consommation linéaire.
+La [Quality of Service](https://kubernetes.io/docs/tasks/configure-pod-container/quality-service-pod/) est une valeur attribuée par Kubernetes a vos pods en fonction des définitions de ressources.
 
-De plus, elle ne corresponds coté système qu'à des CGroups différents, et n'entre pas en jeu dans l'éviction, seulement dans la gestion des OOM.
+Il en existe 3 :
+  * Guaranteed : request = limit 
+  * Burstable : au moins une définition de request
+  * BestEffort : pas de définition
+
+Viser la QoS guaranteed est souvent illusoire, cela impose d'utiliser la limite CPU, et sous-entend que le composant déployé a une consommation linéaire.
+
+De plus, elle ne correspond côté système qu'à des [CGroups](https://access.redhat.com/documentation/fr-fr/red_hat_enterprise_linux/6/html/resource_management_guide/ch01) différents, et n'entre pas en jeu dans l'éviction sur déploiement, seulement dans la gestion des OOM en cas de manque de ressource sur le noeud.
 
 : vagrant ssh k8s-4
 : sudo systemd-cgls
@@ -207,5 +224,5 @@ Si nous parvenons a définir les ressources de l'intégralité de notre workload
 
 Plusieurs pistes sont possibles:
   * Utiliser [datadog](https://app.datadoghq.com/metric/explorer?start=1706022296262&end=1706025896262&paused=false#N4Ig7glgJg5gpgFxALlAGwIYE8D2BXJVEADxQEYAaELcqyKBAC1pEbghkcLIF8qo4AMwgA7CAgg4RKUAiwAHOChASAtnADOcAE4RNIKtrgBHPJoQaUAbVBGN8qVoD6gnNtUZCKiOq279VKY6epbINiAiGOrKQdpYZAYgUJ4YThr42gDGSsgg6gi6mZaBZnHKGABuMMiZUggYojoAdJnyeE14GhjwwADWeABGcE4C8mg4WOoiCMjqqkPaALQDOBQABP1DTplonQg6TpHqyPLaOFAATDwgPAC6VK7ueJih4Y+qzxgxpfE39yAaORoHKgeQYYEIfbKKA4GDbF4aCCZRJoRpOOSKZTpVFQFFo+hMZQiNweNA3fgQeyYLDohQ5ECokRKO48PgAsbiADCUmEMBQImeaB4QA) pour se faire une idée de la consommation
-  * Gatling
+  * [Gatling](https://gatling.io/)
   * Le [Vertical Pod Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler) en mode "recommandation"
