@@ -1,7 +1,7 @@
 # Kubernetes et les ressources
 
 Gouter Engineering
-23 Jan 2024
+8 Feb 2024
 
 : ssh -L 6443:172.18.8.101:6443 falrich@10.0.4.40
 : cd git/kubespray/
@@ -9,7 +9,31 @@ Gouter Engineering
 : vagrant ssh -c "sudo cat /root/.kube/config" k8s-1
 : export KUBECONFIG=~/config_demo
 
+##
+
+Que va-t-on voir ensemble? globalement, ca:
+
+<img src="img/tanker.jpg" alt="image" width="70%" height="auto" style="display: block; margin-left: auto; margin-right: auto;">
+
+Pourquoi ca nous interesse?
+  * Parce qu'on a pas souvent l'occasion de casser Kubernetes, et que ca fait du bien 😁
+  * Pour améliorer notre utilisation de ressources
+    * Etre capable d'autoscaler nos applis et clusters
+    * Et l'on aimerai dans un futur proche travailler ensemble sur le moyen le plus simple de les définir et vous en simplifier au maximum l'usage
+
 ## Enfonçons quelques porte ouvertes
+
+Pour faire tourner un composant, il nous faut
+  * Du cpu
+  * De la mémoire
+  * Du disque
+  * Parfois, une carte graphique - mais c'est hors scope pour aujourd'hui
+
+Ce sont les Nodes Kubernetes qui nous apportent ces ressources
+
+<img src="img/node.png" alt="image" width="70%" height="auto" style="display: block; margin-left: auto; margin-right: auto;">
+
+##
 
 Kubernetes propose de définir des ressources:
 
