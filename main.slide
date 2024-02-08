@@ -23,7 +23,7 @@ Pourquoi ca nous interesse?
 
 ## Enfonçons quelques porte ouvertes
 
-Pour faire tourner un composant, il nous faut
+Pour faire fonctionner un container, il nous faut
   * Du cpu
   * De la mémoire
   * Du disque
@@ -118,6 +118,8 @@ spec:
             memory: 128Mi
 ```
 
+: kubectl apply -f src/nginx-deployment-2cpu.yaml
+
 ## et un autre déploiement tout simple
 
 ```yaml
@@ -145,6 +147,8 @@ spec:
 
 😰 Notre pod ne démarre pas! pourtant il est de taille raisonnable
 
+: kubectl apply -f src/nginx-deployment-100m.yaml
+
 ## Nous réservons effectivement des ressources
 
 Le pod n'a pas pu être "schedule" :
@@ -159,6 +163,7 @@ En plus imagé, voici ce qu'il se passe :
 : k delete deployments.apps -n gachis nginx-1700
 : Augmenter les replicas a 10
 : k scale deployment -n gachis --replicas 10 nginx-100
+: k delete ns gachis
 
 ## Pourquoi réserver des ressources?
 
